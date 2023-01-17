@@ -89,7 +89,7 @@ setup_build_tools () {
 setup_mysql_community_packages () {
 	echo "setup_mysql_community_packages: starting"
 	rpm -q mysql80-community-release ||\
-		yum install -y https://dev.mysql.com/get/mysql80-community-release-el8-4.noarch.rpm	
+		yum install -y https://dev.mysql.com/get/mysql80-community-release-el8-4.noarch.rpm
 	yum module disable -y mysql
 	yum config-manager --enable mysql80-community
 	yum install -y mysql-community-devel mysql-community-libs
