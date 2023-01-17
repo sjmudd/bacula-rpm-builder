@@ -37,6 +37,10 @@ The easier it is to build these rpms the more people will use them.
   and this was causing me troubles as I was backing up to 2 different
   systems to 2 different OS versions, one of which was not supported.
   Once I can build the versions myself that problem goes away.
+- I also wanted to build my MySQL libraries using the official
+  MySQL Community rpms and not the older system rpms provided by the
+  OS vendor. Being able to build the rpms myself made this task
+  possible.
 
 Feedback and patches for this will be most welcome once things look a
 bit more stable and I am able to at least make a clean build for 1 or
