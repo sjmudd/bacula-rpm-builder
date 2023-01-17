@@ -3,7 +3,7 @@ bacula-rpm-builder
 
 This repo is intended to make it possible to build rpms directly from
 the bacula git repo in a repeatable manner without necessarily needing
-to wait for the rpms to be built by the upstream code owners.
+to wait for them to be built by the upstream code owners.
 
 Ideally this script could be incorporated into the
 upstream code so that it is visible to more peope and they are able to use
