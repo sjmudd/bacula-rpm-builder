@@ -9,9 +9,8 @@ Ideally this script could be incorporated into the
 upstream code so that it is visible to more peope and they are able to use
 it to build rpms directly if needed.
 
-This information has been missing in the upstream source code as described in:
-
-see:
+This information has been missing in the upstream source code as described
+below:
 - https://bugs.bacula.org/view.php?id=2575 (original)
 - https://gitlab.bacula.org/bacula-community-edition/bacula-community/-/issues/2575
 - https://bugs.bacula.org/view.php?id=2576 (original)
