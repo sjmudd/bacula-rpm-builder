@@ -1,0 +1,222 @@
+#!/bin/sh
+#
+# Copyright (c) 2023, Simon J Mudd <sjmudd@pobox.com>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# WORK IN PROGRESS - this does not work yet (but is close)
+#
+# Expect to run this script as root from /data from within a docker image
+# - it should setup the environment and build bacula rpms, placing them back in /data
+# - this script would be run as follows
+#     $ docker run -v $PWD:/data -it quay.io/centos/centos:stream8 /data/build all
+# - FIXME: the focus of the current script is building on CentOS 8 Stream
+#   but once working this should work also for other "rpm distributions":
+#   - centos7: quay.io/centos/centos:7
+#   - centos9: quay.io/centos/centos:stream9
+# - FIXME: make the mysql package configuration more flexible to support CentOS upstream
+#   default MariaDB rpms if desired (I don't want this and versions tend to be older)
+
+# update_system_packages: setup $BUILDUSER user
+update_system_packages () {
+	echo "update_system_packages: starting"
+	yum update -y
+	echo "update_system_packages: complete"
+}
+
+# setup_build_user: setup the rpm build user
+setup_build_user () {
+	echo "setup_build_user: starting"
+	# Add sudo as used here to setup the build user.
+	yum install -y sudo
+
+	# create $BUILDUSER user
+	useradd -m -g wheel $BUILDUSER
+
+	# ensure $BUILDUSER user can sudo as root
+	(
+		echo "## allow wheel users to sudo without a password"
+		echo "%wheel	ALL=(ALL)	NOPASSWD: ALL"
+	) >> /etc/sudoers
+
+	# setup build directory structure
+	for dir in /home/$BUILDUSER/rpmbuild /home/$BUILDUSER/rpmbuild/{BUILD,BUILDROOT,SPECS,SOURCES}; do
+		test -d $dir || {
+			echo "creating missing directory $dir"
+			sudo -u $BUILDUSER mkdir $dir
+		}
+	done
+	echo "setup_build_user: complete"
+}
+
+# setup build tools
+setup_build_tools () {
+	EXTRA_PKGS="bc hostname wget"
+	# rpmbuild dependencies (centos8)
+	RPMBUILD_DEPENDENCIES="bzip2-devel libacl-devel libxml2-devel ncurses-devel openldap-devel readline-devel"
+
+	echo "setup_build_tools: starting"
+#	dnf install -y rpmdevtools rpmlint sudo git cmake gcc-toolset-10-toolchain  # USE THIS LATER AS THE TOOLSET IS NEWER
+	dnf install -y rpmdevtools rpmlint git cmake $EXTRA_PKGS $RPMBUILD_DEPENDENCIES
+	dnf group install -y "Development Tools"
+	echo "setup_build_tools: complete"
+}
+
+# setup_mysql_community_packages: setup MySQL 8 community packages (instead of default MariaDB)
+# MySQL 8.0 setup
+# https://dev.mysql.com/doc/refman/8.0/en/linux-installation-yum-repo.html
+# - ./configure --with-mysql
+setup_mysql_community_packages () {
+	echo "setup_mysql_community_packages: starting"
+	rpm -q mysql80-community-release ||\
+		yum install -y https://dev.mysql.com/get/mysql80-community-release-el8-4.noarch.rpm	
+	yum module disable -y mysql
+	yum config-manager --enable mysql80-community
+	yum install -y mysql-community-devel mysql-community-libs
+	echo "setup_mysql_community_packages: complete"
+}
+
+# setup_git_tree: as rpm build user pull down the git repo
+# note git tree layout is somewhat weird:
+# bacula/bacula/<bacula code is here>
+#       /gui
+#       /regress
+# the bacula tar balls are based under the bacula/bacula directory only it seems.
+
+setup_git_tree () {
+	echo "setup_git_tree: starting"
+	if [ $USER = root ]; then
+		echo "Dropping privileges to $BUILDUSER user"
+		exec sudo -u $BUILDUSER $0 setup_git_tree
+	fi
+	if [ $USER != $BUILDUSER ]; then
+		echo "Not running as expected user: $BUILDUSER, exiting"
+		exit 1
+	fi
+	echo "setup_git_tree: (pull down bacula code) starting"
+
+	cd # $HOME
+
+	git clone https://git.bacula.org/bacula.git
+	cd bacula
+	### FIXME: for now we provide GIT_TAG=13.0.1, yet the tag in git is actually Release-13.0.1
+	### and the version is 13.0.1.
+	### CLEAN THIS UP, probably by using the real tag and attempting to generate the version based on that.
+	git checkout Release-$GIT_TAG
+	cd bacula # under the base bacula tree.
+	# make a tar ball from the git tree
+	# - note this is not the git tar ball but only a tarball of the bacula source code.
+	(
+		echo "creating bacula tarball: ~/rpmbuild/SOURCES/bacula-${GIT_TAG}.tar.gz"
+		tar --transform "s,^\.,bacula-${GIT_TAG}," -czf ~/rpmbuild/SOURCES/bacula-${GIT_TAG}.tar.gz .
+		# Note: filename inconsistency!
+		echo "creating ~/rpmbuild/SOURCES/Release_Notes-${GIT_TAG}.tar.gz"
+		tar -czf ~/rpmbuild/SOURCES/Release_Notes-${GIT_TAG}-${RPM_RELEASE}.tar.gz ReleaseNotes
+	)
+
+	# We need to run ./configure to build the spec file from the template.
+	I_WANT_MYSQL=--with-mysql
+	# this will create the spec file.
+	./configure $I_WANT_MYSQL # won't build without at least some options
+
+	# depkgs stuff
+	TARBALL=depkgs-${DEPKGS_VERSION}.tar.gz
+	echo "Retrieving $TARBALL from sourceforge.net"
+	wget -q -O ~/rpmbuild/SOURCES/$TARBALL https://sourceforge.net/projects/bacula/files/depkgs/$TARBALL
+
+	# patch the spec file to have the right depkgs_version setting
+	echo "Patching bacula.spec"
+	sed -e "s/define depkgs_version /&$DEPKGS_VERSION/" \
+		-e "s/@RELEASE@/$RPM_RELEASE/" \
+		< platforms/rpms/redhat/bacula.spec > ~/rpmbuild/SPECS/bacula.spec
+	# FIXME: move over other .spec files later.
+	# - spec files are: bacula-bat.spec  bacula-docs.spec  bacula-mtx.spec  bacula.spec
+	echo "setup_git_tree: complete"
+}
+
+build_packages () {
+	echo "build_package: starting"
+	if [ $USER = root ]; then
+		echo "Dropping privileges to $BUILDUSER user"
+		exec sudo -u $BUILDUSER $0 build_packages
+	fi
+	if [ $USER != $BUILDUSER ]; then
+		echo "Not running as expected user: $BUILDUSER, exiting"
+		exit 1
+	fi
+	echo "STAGE 5 (build the rpms as $BUILDUSER) starting"
+	cd
+	cd rpmbuild/SPECS
+	## FIXME testing
+	EXTRA_DEFINES="--define 'build_rhel8 1' --define 'build_mysql 1'"
+
+	# FIXME: below does not work
+	# rpmbuild -ba $(echo $EXTRA_DEFINES) bacula.spec
+	# FIXME: so I can pass the parameters properly.
+	rpmbuild -ba \
+		--define 'build_rhel8 1' \
+		--define 'build_mysql 1' \
+		bacula.spec
+
+	# move all build rpms outside of docker
+	echo "Moving any built rpm files under /data/ ..."
+	sudo mv ../SRPMS/* ../RPMS/* /data/
+	echo "build_package: complete"
+}
+
+# Minimal configuration which is semi hard-coded
+GIT_TAG=${2:-13.0.1}
+DEPKGS_VERSION=${3:-23May20}
+BUILDUSER=${4:-rpmbuild}
+RPM_RELEASE=${5:-1.el8}
+
+if [ -z "$USER" ]; then
+	export USER=$(id -un)
+fi
+
+set -ex
+
+stage=$1
+case $stage in
+update_system_packages) update_system_packages
+	;;
+setup_build_user) setup_build_user
+	;;
+setup_build_tools) setup_build_tools
+	;;
+setup_mysql_community_packages) setup_mysql_community_packages
+	;;
+setup_git_tree) setup_git_tree
+	;;
+build_packages) build_packages
+	;;
+all)	update_system_packages
+	setup_build_user
+	setup_build_tools
+	setup_mysql_community_packages
+	setup_git_tree 
+	build_packages
+	;;
+*)	echo "Usage: $0 <update_system_packages|setup_build_user|setup_build_tools|setup_mysql_community_packages|setup_git_tree|build_packages|all>"
+	exit 1
+esac
