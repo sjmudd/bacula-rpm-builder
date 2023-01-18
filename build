@@ -74,10 +74,11 @@ setup_build_tools () {
 	EXTRA_PKGS="bc hostname wget"
 	# rpmbuild dependencies (centos8)
 	RPMBUILD_DEPENDENCIES="bzip2-devel libacl-devel libxml2-devel ncurses-devel openldap-devel readline-devel"
-
+	# Include PostgreSQL libraries
+	PQ_DEPENDENCIES="libpq libpq-devel"
 	echo "setup_build_tools: starting"
 #	dnf install -y rpmdevtools rpmlint sudo git cmake gcc-toolset-10-toolchain  # USE THIS LATER AS THE TOOLSET IS NEWER
-	dnf install -y rpmdevtools rpmlint git cmake $EXTRA_PKGS $RPMBUILD_DEPENDENCIES
+	dnf install -y rpmdevtools rpmlint git cmake $EXTRA_PKGS $RPMBUILD_DEPENDENCIES $PQ_DEPENDENCIES
 	dnf group install -y "Development Tools"
 	echo "setup_build_tools: complete"
 }
@@ -107,7 +108,8 @@ setup_git_tree () {
 	echo "setup_git_tree: starting"
 	if [ $USER = root ]; then
 		echo "Dropping privileges to $BUILDUSER user"
-		exec sudo -u $BUILDUSER $0 setup_git_tree
+		sudo -u $BUILDUSER $0 setup_git_tree
+		return
 	fi
 	if [ $USER != $BUILDUSER ]; then
 		echo "Not running as expected user: $BUILDUSER, exiting"
@@ -128,16 +130,19 @@ setup_git_tree () {
 	# - note this is not the git tar ball but only a tarball of the bacula source code.
 	(
 		echo "creating bacula tarball: ~/rpmbuild/SOURCES/bacula-${GIT_TAG}.tar.gz"
-		tar --transform "s,^\.,bacula-${GIT_TAG}," -czf ~/rpmbuild/SOURCES/bacula-${GIT_TAG}.tar.gz .
+		tar --transform "s,^\.,bacula-${GIT_TAG}," \
+			-czf ~/rpmbuild/SOURCES/bacula-${GIT_TAG}.tar.gz .
 		# Note: filename inconsistency!
 		echo "creating ~/rpmbuild/SOURCES/Release_Notes-${GIT_TAG}.tar.gz"
-		tar -czf ~/rpmbuild/SOURCES/Release_Notes-${GIT_TAG}-${RPM_RELEASE}.tar.gz ReleaseNotes
+		tar --transform "s,ReleaseNotes,Release_Notes-${GIT_TAG}-${RPM_RELEASE}.txt," \
+			-czf ~/rpmbuild/SOURCES/Release_Notes-${GIT_TAG}-${RPM_RELEASE}.tar.gz ReleaseNotes
 	)
 
 	# We need to run ./configure to build the spec file from the template.
-	I_WANT_MYSQL=--with-mysql
-	# this will create the spec file.
-	./configure $I_WANT_MYSQL # won't build without at least some options
+	#WITH_BACKENDS="--with-mysql --with-postgresql"
+	WITH_BACKENDS="--with-mysql"  # FIXME: also build in PostgreSQL support
+	# create the spec file.
+	./configure $WITH_BACKENDS # won't build without at least some options
 
 	# depkgs stuff
 	TARBALL=depkgs-${DEPKGS_VERSION}.tar.gz
@@ -151,6 +156,7 @@ setup_git_tree () {
 		< platforms/rpms/redhat/bacula.spec > ~/rpmbuild/SPECS/bacula.spec
 	# FIXME: move over other .spec files later.
 	# - spec files are: bacula-bat.spec  bacula-docs.spec  bacula-mtx.spec  bacula.spec
+
 	echo "setup_git_tree: complete"
 }
 
@@ -158,13 +164,14 @@ build_packages () {
 	echo "build_package: starting"
 	if [ $USER = root ]; then
 		echo "Dropping privileges to $BUILDUSER user"
-		exec sudo -u $BUILDUSER $0 build_packages
+		sudo -u $BUILDUSER $0 build_packages
+		return
 	fi
 	if [ $USER != $BUILDUSER ]; then
 		echo "Not running as expected user: $BUILDUSER, exiting"
 		exit 1
 	fi
-	echo "STAGE 5 (build the rpms as $BUILDUSER) starting"
+	echo "build_packages: (build the rpms as $BUILDUSER) starting"
 	cd
 	cd rpmbuild/SPECS
 	## FIXME testing
@@ -173,22 +180,36 @@ build_packages () {
 	# FIXME: below does not work
 	# rpmbuild -ba $(echo $EXTRA_DEFINES) bacula.spec
 	# FIXME: so I can pass the parameters properly.
+
+	# FIXME: sign the rpms being built.
+	echo "Building the .src.rpm..."
+	#	--define 'build_postgresql 1' \   FIXME ADD THIS
+	rpmbuild -bs \
+		--define 'build_rhel8 1' \
+		--define 'build_mysql 1' \
+		bacula.spec
+	echo "Building the binary rpm..."
+	#	--define 'build_postgresql 1' \   FIXME ADD THIS
 	rpmbuild -ba \
 		--define 'build_rhel8 1' \
 		--define 'build_mysql 1' \
 		bacula.spec
 
-	# move all build rpms outside of docker
+	# Move all built rpms outside of docker
 	echo "Moving any built rpm files under /data/ ..."
-	sudo mv ../SRPMS/* ../RPMS/* /data/
-	echo "build_package: complete"
+	sudo mv ../SRPMS/* ../RPMS/*/* /data/
+	echo "build_packages: complete"
 }
 
 # Minimal configuration which is semi hard-coded
+stage=${1:-all}
 GIT_TAG=${2:-13.0.1}
 DEPKGS_VERSION=${3:-23May20}
 BUILDUSER=${4:-rpmbuild}
-RPM_RELEASE=${5:-1.el8}
+# Judging from the versions built on bacula.org this value is YYMMDDHH
+# so will copy that format for hopeful consistency.
+# Note: the value used (via the docker image) is in UTC.
+RPM_RELEASE=${5:-$(date +%Y%m%d%H)1.el8}
 
 if [ -z "$USER" ]; then
 	export USER=$(id -un)
@@ -196,7 +217,6 @@ fi
 
 set -ex
 
-stage=$1
 case $stage in
 update_system_packages) update_system_packages
 	;;
