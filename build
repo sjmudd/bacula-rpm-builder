@@ -37,6 +37,41 @@
 # - FIXME: make the mysql package configuration more flexible to support CentOS upstream
 #   default MariaDB rpms if desired (I don't want this and versions tend to be older)
 
+# detect the OS and return a value
+# - centos7 centos8 centos9 (we ignore stream)
+detect_running_os () {
+	# global name, pretty ugly
+	RUNNING_OS=unknown
+
+	if rpm -q centos-stream-release >/dev/null 2>&1; then
+		RUNNING_OS=centos$(rpm --queryformat '%{VERSION}' -q centos-stream-release | cut -d. -f1)
+	elif rpm -q centos-release >/dev/null 2>&1; then
+		RUNNING_OS=centos$(rpm --queryformat '%{VERSION}' -q centos-release | cut -d. -f1)
+	else
+		echo "Unrecognised OS. Please fix me"
+		exit 1
+	fi
+}
+
+configure_os_related_settings () {
+	case $RUNNING_OS in
+	centos7)
+		COMMUNITY_RELEASE=el7-7
+		BUILD_OS=build_rhel7
+		;;
+	centos8)
+		COMMUNITY_RELEASE=el8-4
+		BUILD_OS=build_rhel8
+		;;
+	centos9)
+		COMMUNITY_RELEASE=el9-1
+		BUILD_OS=build_rhel9
+		;;
+	*)	echo "Unrecognised OS. Please fix me"
+		exit 1
+	esac
+}
+
 # update_system_packages: setup $BUILDUSER user
 update_system_packages () {
 	echo "update_system_packages: starting"
@@ -90,7 +125,7 @@ setup_build_tools () {
 setup_mysql_community_packages () {
 	echo "setup_mysql_community_packages: starting"
 	rpm -q mysql80-community-release ||\
-		yum install -y https://dev.mysql.com/get/mysql80-community-release-el8-4.noarch.rpm
+		yum install -y https://dev.mysql.com/get/mysql80-community-release-${COMMUNITY_RELEASE}.noarch.rpm
 	yum module disable -y mysql
 	yum config-manager --enable mysql80-community
 	yum install -y mysql-community-devel mysql-community-libs
@@ -175,7 +210,7 @@ build_packages () {
 	cd
 	cd rpmbuild/SPECS
 	## FIXME testing
-	EXTRA_DEFINES="--define 'build_rhel8 1' --define 'build_mysql 1'"
+	EXTRA_DEFINES="--define '$BUILD_OS 1' --define 'build_mysql 1'"
 
 	# FIXME: below does not work
 	# rpmbuild -ba $(echo $EXTRA_DEFINES) bacula.spec
@@ -185,14 +220,14 @@ build_packages () {
 	echo "Building the .src.rpm..."
 	#	--define 'build_postgresql 1' \   FIXME ADD THIS
 	rpmbuild -bs \
-		--define 'build_rhel8 1' \
-		--define 'build_mysql 1' \
+		--define "$BUILD_OS 1" \
+		--define "build_mysql 1" \
 		bacula.spec
 	echo "Building the binary rpm..."
 	#	--define 'build_postgresql 1' \   FIXME ADD THIS
 	rpmbuild -ba \
-		--define 'build_rhel8 1' \
-		--define 'build_mysql 1' \
+		--define "$BUILD_OS 1" \
+		--define "build_mysql 1" \
 		bacula.spec
 
 	# Move all built rpms outside of docker
@@ -209,7 +244,7 @@ BUILDUSER=${4:-rpmbuild}
 # Judging from the versions built on bacula.org this value is YYMMDDHH
 # so will copy that format for hopeful consistency.
 # Note: the value used (via the docker image) is in UTC.
-RPM_RELEASE=${5:-$(date +%Y%m%d%H)1.el8}
+RPM_RELEASE=${5:-$(date +%Y%m%d%H)1.el9}
 
 if [ -z "$USER" ]; then
 	export USER=$(id -un)
@@ -218,6 +253,10 @@ fi
 set -ex
 
 case $stage in
+detect_running_os) detect_running_os
+	;;
+configure_os_related_settings) configure_os_related_settings
+	;;
 update_system_packages) update_system_packages
 	;;
 setup_build_user) setup_build_user
@@ -230,7 +269,9 @@ setup_git_tree) setup_git_tree
 	;;
 build_packages) build_packages
 	;;
-all)	update_system_packages
+all)	detect_running_os
+	configure_os_related_settings
+	update_system_packages
 	setup_build_user
 	setup_build_tools
 	setup_mysql_community_packages
