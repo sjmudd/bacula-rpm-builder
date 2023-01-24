@@ -29,7 +29,7 @@
 # Expect to run this script as root from /data from within a docker image
 # - it should setup the environment and build bacula rpms, placing them back in /data
 # - this script would be run as follows
-#     $ docker run -v $PWD:/data -it quay.io/centos/centos:stream8 /data/build all
+#     $ docker run --rm -v $PWD:/data -it quay.io/centos/centos:stream8 /data/build all
 # - FIXME: the focus of the current script is building on CentOS 8 Stream
 #   but once working this should work also for other "rpm distributions":
 #   - centos7: quay.io/centos/centos:7
@@ -39,7 +39,7 @@
 
 # detect the OS and return a value
 # - centos7 centos8 centos9 (we ignore stream)
-detect_running_os () {
+detect_operating_system () {
 	# global name, pretty ugly
 	RUNNING_OS=unknown
 
@@ -53,19 +53,29 @@ detect_running_os () {
 	fi
 }
 
+# See: https://dev.mysql.com/doc/refman/8.0/en/linux-installation-yum-repo.html
 configure_os_related_settings () {
 	case $RUNNING_OS in
 	centos7)
+		export BUILD_OS=build_rhel7
+		CAN_DISABLE_YUM_MODULE=
+		CAN_ENABLE_YUM_REPO=
 		COMMUNITY_RELEASE=el7-7
-		BUILD_OS=build_rhel7
+		INSTALL_DNF=1
 		;;
 	centos8)
+		export BUILD_OS=build_rhel8
+		CAN_DISABLE_YUM_MODULE=1
+		CAN_ENABLE_YUM_REPO=1
 		COMMUNITY_RELEASE=el8-4
-		BUILD_OS=build_rhel8
+		INSTALL_DNF=
 		;;
 	centos9)
+		export BUILD_OS=build_rhel9
+		CAN_DISABLE_YUM_MODULE=
+		CAN_ENABLE_YUM_REPO=1
 		COMMUNITY_RELEASE=el9-1
-		BUILD_OS=build_rhel9
+		INSTALL_DNF=
 		;;
 	*)	echo "Unrecognised OS. Please fix me"
 		exit 1
@@ -76,6 +86,9 @@ configure_os_related_settings () {
 update_system_packages () {
 	echo "update_system_packages: starting"
 	yum update -y
+	if [ -n "$INSTALL_DNF" ]; then
+		yum install -y dnf
+	fi
 	echo "update_system_packages: complete"
 }
 
@@ -112,9 +125,9 @@ setup_build_tools () {
 	# Include PostgreSQL libraries
 	PQ_DEPENDENCIES="libpq libpq-devel"
 	echo "setup_build_tools: starting"
-#	dnf install -y rpmdevtools rpmlint sudo git cmake gcc-toolset-10-toolchain  # USE THIS LATER AS THE TOOLSET IS NEWER
-	dnf install -y rpmdevtools rpmlint git cmake $EXTRA_PKGS $RPMBUILD_DEPENDENCIES $PQ_DEPENDENCIES
-	dnf group install -y "Development Tools"
+#	yum install -y rpmdevtools rpmlint sudo git cmake gcc-toolset-10-toolchain  # USE THIS LATER AS THE TOOLSET IS NEWER
+	yum install -y rpmdevtools rpmlint git cmake $EXTRA_PKGS $RPMBUILD_DEPENDENCIES $PQ_DEPENDENCIES
+	yum group install -y "Development Tools"
 	echo "setup_build_tools: complete"
 }
 
@@ -126,8 +139,12 @@ setup_mysql_community_packages () {
 	echo "setup_mysql_community_packages: starting"
 	rpm -q mysql80-community-release ||\
 		yum install -y https://dev.mysql.com/get/mysql80-community-release-${COMMUNITY_RELEASE}.noarch.rpm
-	yum module disable -y mysql
-	yum config-manager --enable mysql80-community
+	if [ -n "$CAN_DISABLE_YUM_MODULE" ]; then
+		yum module disable -y mysql
+	fi
+	if [ -n "$CAN_ENABLE_REPO" ]; then
+		yum-config-manager enable -y mysql80-community
+	fi
 	yum install -y mysql-community-devel mysql-community-libs
 	echo "setup_mysql_community_packages: complete"
 }
@@ -199,7 +216,7 @@ build_packages () {
 	echo "build_package: starting"
 	if [ $USER = root ]; then
 		echo "Dropping privileges to $BUILDUSER user"
-		sudo -u $BUILDUSER $0 build_packages
+		sudo -E -u $BUILDUSER $0 build_packages
 		return
 	fi
 	if [ $USER != $BUILDUSER ]; then
@@ -253,7 +270,7 @@ fi
 set -ex
 
 case $stage in
-detect_running_os) detect_running_os
+detect_operating_system) detect_operating_system
 	;;
 configure_os_related_settings) configure_os_related_settings
 	;;
@@ -269,13 +286,13 @@ setup_git_tree) setup_git_tree
 	;;
 build_packages) build_packages
 	;;
-all)	detect_running_os
+all)	update_system_packages
+	detect_operating_system
 	configure_os_related_settings
-	update_system_packages
 	setup_build_user
 	setup_build_tools
 	setup_mysql_community_packages
-	setup_git_tree 
+	setup_git_tree
 	build_packages
 	;;
 *)	echo "Usage: $0 <update_system_packages|setup_build_user|setup_build_tools|setup_mysql_community_packages|setup_git_tree|build_packages|all>"
