@@ -1,0 +1,15 @@
+#!/bin/sh
+#
+# Wrapper script to build all rpms against CentOS 7..9 rpms
+# - this script should be run from the HOST server that uses docker
+
+docker=$(which docker 2>/dev/null)
+if [ -z "$docker" ]; then
+	echo "Docker not found. Please install it to run this script"
+	exit 1
+fi
+
+base=quay.io/centos/centos
+for dist in 7 stream8 stream9; do
+	$docker run --rm -v $PWD:/data -it $base:$dist /data/build all
+done
