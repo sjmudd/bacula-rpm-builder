@@ -1,5 +1,4 @@
-bacula-rpm-builder
-==================
+# bacula-rpm-builder
 
 This repo is intended to make it possible to build rpms directly from
 the bacula git repo in a repeatable manner without necessarily needing
@@ -45,5 +44,27 @@ The easier it is to build these rpms the more people will use them.
 Feedback and patches for this will be most welcome once things look a
 bit more stable and I am able to at least make a clean build for 1 or
 2 CentOS versions.
+
+## Usage
+
+- ensure docker is installed
+- invoke docker to build the images:
+
+```
+#docker run --rm -v $PWD:/data -ti quay.io/centos/centos:7 /data/build all # not working yet
+docker run --rm -v $PWD:/data -ti quay.io/centos/centos:stream8 /data/build all
+docker run --rm -v $PWD:/data -ti quay.io/centos/centos:stream9 /data/build all
+```
+
+To debug issues change `/data/build all` with `/bin/bash` and this will
+take you into the container where you can run `/data/build all` to run
+the build manually.
+
+## See also
+
+- `TODO` - work to do to complete the whole intended build process
+- `BUGS` - bugs seen with the current build process
+
+## Author
 
 Simon J Mudd <sjmudd@pobox.com>
