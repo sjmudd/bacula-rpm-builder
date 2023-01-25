@@ -1,0 +1,48 @@
+--- bacula.spec.orig	2023-01-25 22:19:23.969778300 +0000
++++ bacula.spec	2023-01-25 22:23:47.931105488 +0000
+@@ -160,6 +160,9 @@
+ %define rhel8 0
+ %{?build_rhel8:%define rhel8 1}
+ %{?build_el8:%define rhel8 1}
++%define rhel9 0
++%{?build_rhel9:%define rhel9 1}
++%{?build_el9:%define rhel9 1}
+ # CentOS build
+ %define centos3 0
+ %{?build_centos3:%define centos3 1}
+@@ -217,7 +220,7 @@
+ # if the platform is using systemd
+ %define usesystemd 0
+ 
+-%if %{rhel7} || %{rhel8} || %{fc22}|| %{fc25} || %{fc26} || %{fc27} || %{fc31} || %{centos7}
++%if %{rhel7} || %{rhel8} || %{rhel9} || %{fc22}|| %{fc25} || %{fc26} || %{fc27} || %{fc31} || %{centos7}
+ %define usesystemd 1
+ %endif
+ 
+@@ -244,7 +247,7 @@
+ %define suse 1
+ %endif
+ %define rhel 0
+-%if %{rhel3} || %{rhel4} || %{rhel5} || %{rhel6} || %{rhel7} || %{rhel8} || %{centos3} || %{centos4} || %{centos5} || %{centos6} || %{centos7}
++%if %{rhel3} || %{rhel4} || %{rhel5} || %{rhel6} || %{rhel7} || %{rhel8} || %{rhel9} || %{centos3} || %{centos4} || %{centos5} || %{centos6} || %{centos7}
+ %define rhel 1
+ %endif
+ %define scil 0
+@@ -323,7 +326,7 @@
+ %{?build_tcpwrappers:%define tcpwrappers 1}
+ 
+ # should we enable tcp wrappers support
+-%if %{rhel8} || %{fc31}
++%if %{rhel8} || %{rhel9} || %{fc31}
+ %define tcpwrappers 0
+ %else
+ %define tcpwrappers 1
+@@ -588,7 +591,7 @@
+ %endif
+ 
+ ## Do not build lzo on rhel8/centos8
+-%if ! ( %{rhel8} ||  %{fc31})
++%if ! ( %{rhel8} || %{rhel9} || %{fc31} )
+ cd %{depkgs}
+ make lzo
+ export LDFLAGS="${LDFLAGS} -L${PWD}/lzo/lib"
