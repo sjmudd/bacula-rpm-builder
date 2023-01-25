@@ -60,6 +60,21 @@ To debug issues change `/data/build all` with `/bin/bash` and this will
 take you into the container where you can run `/data/build all` to run
 the build manually.
 
+## Testing
+
+My personal interest was to get this working on CentOS Linux but there
+are several other RHEL compatible operating systems.
+
+So far this seems to work on:
+
++-----------+-----+-----+-----+--------------------------------------------------+
+| OS Name   |  7  |  8  |  9  | Notes                                            |
++-----------+-----+-----+-----+--------------------------------------------------+
+| RHEL      |     |     |     | need patch to confirm correct output to look for |
+| CentOS    |     |  Y  |  Y  |                                                  |
+| AlmaLinux |     |  Y  |  Y  |                                                  |
++-----------+-----+-----+-----+--------------------------------------------------+
+
 ## See also
 
 - `TODO` - work to do to complete the whole intended build process

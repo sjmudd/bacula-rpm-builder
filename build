@@ -47,6 +47,8 @@ detect_operating_system () {
 		RUNNING_OS=centos$(rpm --queryformat '%{VERSION}' -q centos-stream-release | cut -d. -f1)
 	elif rpm -q centos-release >/dev/null 2>&1; then
 		RUNNING_OS=centos$(rpm --queryformat '%{VERSION}' -q centos-release | cut -d. -f1)
+	elif rpm -q almalinux-release >/dev/null 2>&1; then
+		RUNNING_OS=centos$(rpm --queryformat '%{VERSION}' -q almalinux-release | cut -d. -f1)
 	else
 		echo "Unrecognised OS. Please fix me"
 		exit 1
