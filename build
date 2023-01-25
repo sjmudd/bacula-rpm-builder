@@ -60,16 +60,19 @@ patch_bacula_spec () {
 	input=platforms/rpms/redhat/bacula.spec
 	output=~/rpmbuild/SPECS/bacula.spec
 
-	cat $input | (
-		# Fix DEPKGS_VERSION
-		sed -e "s/define depkgs_version /&$DEPKGS_VERSION/" \
-			-e "s/@RELEASE@/$RPM_RELEASE/"
+	# Fix DEPKGS_VERSION
+	sed -e "s/define depkgs_version /&$DEPKGS_VERSION/" \
+		-e "s/@RELEASE@/$RPM_RELEASE/" \
+		< $input > $output
 
-		# Fix BuildRequires
-		if [ "$BUILD_OS" = build_rhel7 ]; then
-			sed -e 's/BuildRequires: mariadb-devel/BuildRequires: mysql-community-devel/'
-		fi
-	) > $output
+	# Fix BuildRequires
+	if [ "$BUILD_OS" = build_rhel7 ]; then
+		sed -i -e 's/BuildRequires: mariadb-devel/BuildRequires: mysql-community-devel/' $output
+	fi
+	# Add missing rhel9 directives
+	if [ "$BUILD_OS" = build_rhel9 ]; then
+		( cd ~/rpmbuild/SPECS && patch -p0 < /data/bacula.spec.centos9.patch )
+	fi
 
 	echo "- diff is:"
 	diff -u $input $output || :
@@ -152,8 +155,15 @@ setup_build_user () {
 # setup build tools
 setup_build_tools () {
 	EXTRA_PKGS="bc hostname wget"
-	# rpmbuild dependencies (centos8)
+
+	# rpmbuild dependencies
 	RPMBUILD_DEPENDENCIES="bzip2-devel libacl-devel libxml2-devel ncurses-devel openldap-devel readline-devel"
+
+	# rpmbuild dependencies (centos7)
+	if [ "$BUILD_OS" = build_rhel7 ]; then
+		RPMBUILD_DEPENDENCIES="$RPMBUILD_DEPENDENCIES tcp_wrappers-devel"
+	fi
+
 	# Include PostgreSQL libraries
 	PQ_DEPENDENCIES="libpq libpq-devel"
 	echo "setup_build_tools: starting"
