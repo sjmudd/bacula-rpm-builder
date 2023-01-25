@@ -6,7 +6,7 @@ need to be resolved:
 
 - allow the build to use the OS based MySQL (rather than my preference of MySQL community 8.0)
 - make build work with	--define 'build_postgresql 1'
-- make build work on CentOS 7 and CentOS 9, ideally by recognising the base OS and not requiring any manual configuration.
+- make build work on CentOS 7, see BUGS
 - make the build use the latest gcc-toolset version usable on each release
 - make the determination of the version to build configurable, e.g. by tag name.
   - for now we provide GIT_TAG=13.0.1, yet the tag in git is actually Release-13.0.1
@@ -14,4 +14,3 @@ need to be resolved:
 - make the following rpm build settings optionally configurable
   - Packager    : 'Bacula Systems SA <packagers@baculasystems.com>'
   - Vendor      : The Bacula Team
-- make the docker hostname match the OS

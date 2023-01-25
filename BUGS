@@ -1,0 +1,19 @@
+BUGS
+====
+
+1. Fix this building CentOS 7
+
+#   ==>Entering directory /home/rpmbuild/rpmbuild/BUILD/bacula-13.0.1/src/cats
+#   make[1]: Entering directory `/home/rpmbuild/rpmbuild/BUILD/bacula-13.0.1/src/cats'
+#   Making libbaccats-mysql.la ...
+#   /home/rpmbuild/rpmbuild/BUILD/bacula-13.0.1/libtool --silent --tag=CXX --mode=link /bin/g++   -L/home/rpmbuild/rpmbuild/BUILD/depkgs/lzo/lib -o libbaccats-mysql.la mysql.lo -export-dynamic -rpath /opt/bacula/lib -release 13.0.1 \
+#   						   -soname libbaccats-13.0.1.so /usr/lib/libmysqlclient_r.a
+#   
+#   *** Warning: Linking the shared library libbaccats-mysql.la against the
+#   *** static library /usr/lib/libmysqlclient_r.a is not portable!
+#   g++: error: /usr/lib/libmysqlclient_r.a: No such file or directory
+#   make[1]: *** [libbaccats-mysql.la] Error 1
+#   make[1]: Leaving directory `/home/rpmbuild/rpmbuild/BUILD/bacula-13.0.1/src/cats'
+#   
+#   
+#     ====== Error in /home/rpmbuild/rpmbuild/BUILD/bacula-13.0.1/src/cats ======
