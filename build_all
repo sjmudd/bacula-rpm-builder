@@ -9,7 +9,15 @@ if [ -z "$docker" ]; then
 	exit 1
 fi
 
+get_hostname () {
+	cat <<-EOF | grep "^$1" | awk '{ print $2 }'
+	7	bacula-build-rhel7
+	stream8	bacula-build-rhel8
+	stream9	bacula-build-rhel9
+	EOF
+}
+
 base=quay.io/centos/centos
 for dist in 7 stream8 stream9; do
-	$docker run --rm -v $PWD:/data -it $base:$dist /data/build all
+	$docker run --rm -v $PWD:/data --hostname $(get_hostname $dist) -it $base:$dist /data/build all
 done
