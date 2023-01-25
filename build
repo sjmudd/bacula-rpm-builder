@@ -55,31 +55,41 @@ detect_operating_system () {
 
 # See: https://dev.mysql.com/doc/refman/8.0/en/linux-installation-yum-repo.html
 configure_os_related_settings () {
+	RPM_RELEASE=$(date +%Y%m%d%H)
+
 	case $RUNNING_OS in
 	centos7)
-		export BUILD_OS=build_rhel7
+		BUILD_OS=build_rhel7
 		CAN_DISABLE_YUM_MODULE=
 		CAN_ENABLE_YUM_REPO=
 		COMMUNITY_RELEASE=el7-7
 		INSTALL_DNF=1
+		RPM_RELEASE=$RPM_RELEASE.el7
 		;;
 	centos8)
-		export BUILD_OS=build_rhel8
+		BUILD_OS=build_rhel8
 		CAN_DISABLE_YUM_MODULE=1
 		CAN_ENABLE_YUM_REPO=1
 		COMMUNITY_RELEASE=el8-4
 		INSTALL_DNF=
+		RPM_RELEASE=$RPM_RELEASE.el8
 		;;
 	centos9)
-		export BUILD_OS=build_rhel9
+		BUILD_OS=build_rhel9
 		CAN_DISABLE_YUM_MODULE=
 		CAN_ENABLE_YUM_REPO=1
 		COMMUNITY_RELEASE=el9-1
 		INSTALL_DNF=
+		RPM_RELEASE=$RPM_RELEASE.el9
 		;;
 	*)	echo "Unrecognised OS. Please fix me"
 		exit 1
 	esac
+
+	# Export some variables that need to be exportd if dropping privileges
+	export BUILD_OS
+	export DEPKGS_VERSION
+	export RPM_RELEASE
 }
 
 # update_system_packages: setup $BUILDUSER user
@@ -160,7 +170,7 @@ setup_git_tree () {
 	echo "setup_git_tree: starting"
 	if [ $USER = root ]; then
 		echo "Dropping privileges to $BUILDUSER user"
-		sudo -u $BUILDUSER $0 setup_git_tree
+		sudo -E -u $BUILDUSER $0 setup_git_tree
 		return
 	fi
 	if [ $USER != $BUILDUSER ]; then
@@ -258,10 +268,6 @@ stage=${1:-all}
 GIT_TAG=${2:-13.0.1}
 DEPKGS_VERSION=${3:-23May20}
 BUILDUSER=${4:-rpmbuild}
-# Judging from the versions built on bacula.org this value is YYMMDDHH
-# so will copy that format for hopeful consistency.
-# Note: the value used (via the docker image) is in UTC.
-RPM_RELEASE=${5:-$(date +%Y%m%d%H)1.el9}
 
 if [ -z "$USER" ]; then
 	export USER=$(id -un)
