@@ -53,6 +53,28 @@ detect_operating_system () {
 	fi
 }
 
+# patch bacula.spec
+patch_bacula_spec () {
+	echo "Patching bacula.spec"
+
+	input=platforms/rpms/redhat/bacula.spec
+	output=~/rpmbuild/SPECS/bacula.spec
+
+	cat $input | (
+		# Fix DEPKGS_VERSION
+		sed -e "s/define depkgs_version /&$DEPKGS_VERSION/" \
+			-e "s/@RELEASE@/$RPM_RELEASE/"
+
+		# Fix BuildRequires
+		if [ "$BUILD_OS" = build_rhel7 ]; then
+			sed -e 's/BuildRequires: mariadb-devel/BuildRequires: mysql-community-devel/'
+		fi
+	) > $output
+
+	echo "- diff is:"
+	diff -u $input $output || :
+}
+
 # See: https://dev.mysql.com/doc/refman/8.0/en/linux-installation-yum-repo.html
 configure_os_related_settings () {
 	RPM_RELEASE=$(date +%Y%m%d%H)
@@ -211,11 +233,8 @@ setup_git_tree () {
 	echo "Retrieving $TARBALL from sourceforge.net"
 	wget -q -O ~/rpmbuild/SOURCES/$TARBALL https://sourceforge.net/projects/bacula/files/depkgs/$TARBALL
 
-	# patch the spec file to have the right depkgs_version setting
-	echo "Patching bacula.spec"
-	sed -e "s/define depkgs_version /&$DEPKGS_VERSION/" \
-		-e "s/@RELEASE@/$RPM_RELEASE/" \
-		< platforms/rpms/redhat/bacula.spec > ~/rpmbuild/SPECS/bacula.spec
+	patch_bacula_spec
+
 	# FIXME: move over other .spec files later.
 	# - spec files are: bacula-bat.spec  bacula-docs.spec  bacula-mtx.spec  bacula.spec
 
